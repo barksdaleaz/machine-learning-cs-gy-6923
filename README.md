@@ -27,3 +27,16 @@ and then determine the performance(s) using these metrics:
 5. Specificity
 6. Precision
 7. Recall ( Sensitivity )
+
+# PART 3: Ensemble Techniques
+
+Pick any 3 of the following Ensemble Techniques below and compare the results with Part 2 (Individual Classifiers):
+
+1. CrossValidation
+2. Leave One Out Cross Validation
+3. Bagging
+4. Random Forest
+5. Boosting
+6. Stacking
+
+Determine Variance and bias and compare. Include: what does cross-validation do to bias and variance?
