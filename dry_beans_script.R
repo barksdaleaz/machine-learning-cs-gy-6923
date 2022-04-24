@@ -269,3 +269,162 @@ knn_metrics <- ml_test(knnPredict, test$Class, output.as.table = FALSE)
 accuracy <- knn_metrics$accuracy
 precision <- knn_metrics$precision
 recall <- knn_metrics$recall
+
+# PART 3: ENSEMBLE TECHNIQUES
+
+# BAGGING
+library(dplyr)       #for data wrangling
+library(e1071)       #for calculating variable importance
+library(caret)       #for general model fitting
+library(rpart)       #for fitting decision trees
+library(ipred)       #for fitting bagged decision trees
+
+#make this example reproducible
+set.seed(4321)
+
+#fit the bagged model
+bag <- bagging(
+  formula = as.factor(Class) ~ .,
+  data = drybeans,
+  nbagg = 150,   
+  coob = TRUE,
+  control = rpart.control(minsplit = 2, cp = 0)
+)
+
+#display fitted bagged model
+bag
+
+#calculate variable importance
+VI <- data.frame(var=names(drybeans[,-17]), imp=varImp(bag))
+
+#sort variable importance descending
+VI_plot <- VI[order(VI$Overall, decreasing=TRUE),]
+
+#visualize variable importance with horizontal bar plot
+barplot(VI_plot$Overall,
+        names.arg=rownames(VI_plot),
+        horiz=TRUE,
+        col='steelblue',
+        xlab='Variable Importance',
+        las=2,
+        cex.names=0.5)
+
+library(Metrics)
+actual <- drybeans$Class
+predicted <- predict(bag)
+act <- as.vector(as.factor(actual))
+pred <- as.vector(as.factor(predicted))
+a <- factor(act)
+p <- factor(pred)
+a <- as.numeric(a)
+p <- as.numeric(p)
+
+bias(a,p) # 0.00286
+
+# CROSS VALIDATION
+library(groupdata2)
+library(checkmate)
+library(knitr)
+library(naivebayes)
+library(psych)
+library(hydroGOF)
+
+#make this example reproducible
+set.seed(4321)
+
+# Split data in 20/80 (percentage)
+parts <- partition(drybeans, p=0.2, cat_col="Class")
+
+test_set <- parts[[1]]
+train_set <- parts[[2]]
+
+# Create folds for cross-validation
+train_set <- fold(train_set, k=4, cat_col="Class")
+
+# Order by .folds
+train_set <- train_set %>% arrange(.folds)
+
+# Create possible formulas
+m0 <- 'Class ~ Compactness + ShapeFactor1 + AspectRation'
+m1 <- 'Class ~ MajorAxisLength + ShapeFactor2 + Perimeter'
+m2 <- 'Class ~ MajorAxisLength + ShapeFactor2 + Perimeter + EquivDiameter + ConvexArea + Area'
+m3 <- 'Class ~ Compactness + ShapeFactor1 + AspectRation + ShapeFactor3 + MajorAxisLength + Area'
+m4 <- 'Class ~ Extent + Solidity + ShapeFactor4'
+
+
+# Cross-Validate
+crossvalidate <- function(data, k, formula, dependent){
+  # 'data' is the training set with the ".folds" column
+  # 'k' is the number of folds we have
+  # 'formula' is a string describing a formula
+  # 'dependent' is a string with the name of the score column we want to predict
+  
+  print("Formula is: ")
+  print(formula)
+  
+  # Initialize empty list for recording performances
+  performances <- c()
+  
+  # One iteration per fold
+  for (fold in 1:k){
+    
+    # Create training set for this iteration
+    # Subset all the datapoints where .folds does not match the current fold
+    training_set <- data[data$.folds != fold,]
+    
+    # Create test set for this iteration
+    # Subset all the datapoints where .folds matches the current fold
+    testing_set <- data[data$.folds == fold,]
+    
+    # Train model on training set
+    model <- naive_bayes(Class ~ Extent + Solidity + ShapeFactor4, training_set)
+    
+    ## Test model
+    
+    # Predict the dependent variable in the testing_set with the trained model
+    predicted <- predict(model, testing_set, allow.new.levels = TRUE)
+  
+    
+    # Get the Root Mean Square Error between the predicted and the observed
+    RMSE <- rmse(as.numeric(factor(predicted)), as.numeric(factor(testing_set[['Class']])))
+    
+    # Add the RMSE to the performance list
+    performances[fold] <- RMSE
+    
+    
+  }
+  
+  # Return the mean of the recorded RMSEs
+  return(c('RMSE' = mean(performances)))
+  
+  # return(performances)
+  
+}
+
+crossvalidate(train_set, k = 4, formula = m0, dependent = 'Class')
+crossvalidate(train_set, k = 4, formula = m1, dependent = 'Class')
+crossvalidate(train_set, k = 4, formula = m2, dependent = 'Class')
+crossvalidate(train_set, k = 4, formula = m3, dependent = 'Class')
+crossvalidate(train_set, k = 4, formula = m4, dependent = 'Class')
+
+# RANDOM FOREST
+library(randomForest)
+library(groupdata2)
+library(caret)
+
+#make this example reproducible
+set.seed(4321)
+
+# Split data into TEST and TRAIN
+index <- createDataPartition(y = drybeans$Class,p = 0.7, list = FALSE)
+train <- drybeans[index,]
+test <- drybeans[-index,]
+
+# Run Random Forest
+rf <- randomForest(x=train, y=as.factor(train$Class), proximity=TRUE)
+
+# Predict on Test data
+pre <- predict(rf, test)
+
+# Confusion Matrix & Statistics
+confusionMatrix(pre, as.factor(test$Class))
